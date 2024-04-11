@@ -1,0 +1,247 @@
+---
+title: "620hw04 code"
+author: "wenfei mao"
+date: "2024-04-09"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+*Problem2 (a) Perform eight individual GLM regression analyses, each for one user; make a summary table that lists the resulting estimates and standard errors of the model parameters β0, . . . , β3*
+```{r}
+library(readxl)
+mydata <- read_excel("C:/Users/windu/Desktop/ScreenTime-hw3Q3-1.xlsx")
+head(mydata)
+```
+
+```{r}
+summary_table1 <- data.frame(ID = numeric(), beta0 = numeric(), beta1 = numeric(), 
+                             beta2 = numeric(), beta3 = numeric(), se_beta0 = numeric(), 
+                             se_beta1 = numeric(), se_beta2 = numeric(), se_beta3 = numeric())
+suppressWarnings(
+for(i in unique(mydata$pseudo_id)) {
+  User_data <- mydata[mydata$pseudo_id == i, ]
+  User_data$Xt <- ifelse(User_data$Day %in% c("Mo", "Tu", "We", "Th", "Fr"), 1, 0)
+  User_data$Bt <- ifelse(User_data$Phase %in% c("Treatment"), 1, 0)
+  lag1_pickups <- lag(User_data$Pickups, n = 1)
+  lambda_i_t <- User_data$Pickups/ User_data$Tot.Scr.Time
+  model1 <- glm(lambda_i_t ~ log(lag1_pickups) + User_data$Bt + User_data$Xt, 
+                offset = log(User_data$Tot.Scr.Time),
+                family = poisson, 
+                data = User_data)
+  summary(model1)
+  coefficients <- summary(model1)$coefficients
+  beta0 = coefficients["(Intercept)", "Estimate"]
+  beta1 = coefficients["log(lag1_pickups)", "Estimate"]
+  beta2 = coefficients["User_data$Bt", "Estimate"] 
+  beta3 = coefficients["User_data$Xt", "Estimate"]
+  se_beta0 = coefficients["(Intercept)", "Std. Error"]
+  se_beta1 = coefficients["log(lag1_pickups)", "Std. Error"]
+  se_beta2 = coefficients["User_data$Bt", "Std. Error"] 
+  se_beta3 = coefficients["User_data$Xt", "Std. Error"]
+  
+
+  summary_table1 <- rbind(summary_table1, data.frame(ID = i, beta0 = beta0, beta1 = beta1, beta2 = beta2, beta3 = beta3, se_beta0 = se_beta0, se_beta1 = se_beta1, se_beta2 = se_beta2, se_beta3 = se_beta3))
+})
+print(summary_table1)
+
+```
+
+*(b) Based on the results from part (a), write an R function to implement a meta-learning that produces the meta-estimates of the model parameters and corresponding standard errors for the eight users.*
+
+```{r}
+meta_learning <- function(summary_table1) {
+  num_users <- length(unique(summary_table1$ID))
+  meta_estimates <- data.frame(
+    Parameter = character(),
+    Meta_Estimate = numeric(),
+    Meta_SE = numeric()
+  )
+  meta_estimates <- rbind(meta_estimates, data.frame(Parameter = "beta0", Estimate = sum(summary_table1$beta0) / num_users, SE = sqrt(sum(summary_table1$se_beta0^2) / (num_users^2))))
+  meta_estimates <- rbind(meta_estimates, data.frame(Parameter = "beta1", Estimate = sum(summary_table1$beta1) / num_users, SE = sqrt(sum(summary_table1$se_beta1^2) / (num_users^2))))
+  meta_estimates <- rbind(meta_estimates, data.frame(Parameter = "beta2", Estimate = sum(summary_table1$beta2) / num_users, SE = sqrt(sum(summary_table1$se_beta2^2) / (num_users^2))))
+  meta_estimates <- rbind(meta_estimates, data.frame(Parameter = "beta3", Estimate = sum(summary_table1$beta3) / num_users, SE = sqrt(sum(summary_table1$se_beta3^2) / (num_users^2))))
+  
+  return(meta_estimates)
+}
+meta_results <- meta_learning(summary_table1)
+print(meta_results)
+```
+
+*(c)Is intervention B (competition) effective to reduce the daily number of pickups in comparison to the no intervention at the baseline (i.e. pre-intervention)? Justify at level α = 0.05*
+```{r}
+mean_pickups_intervention <- mean(mydata$Pickups[mydata$Phase == "Treatment"])
+mean_pickups_baseline <- mean(mydata$Pickups[mydata$Phase == "Baseline"])
+t_test <- t.test(mydata$Pickups[mydata$Phase == "Treatment"], mydata$Pickups[mydata$Phase == "Baseline"])
+print(t_test)
+```
+Because the p-value of t test is 0.927 which is larger than 0.05. Therefore, The intervention B does not reduce the daily number of pickups effectively in comparison to the no intervention at the baseline.
+
+*(d) Comment on, respectively, two major advantages and two major disadvantages of the meta-learning method in comparison to the federated learning method.*
+
+Answer: Advantages: 1. the meta-learning is more flexbile than federated learning. 2. Meta-learning communication more efficient than federated learning. Disadvantage: 1. Typically, meta-learning requires access to the raw data for model training and parameter aggregation, which raises significant privacy concerns. 2. Meta-learning assumes data dsitribution across different users are homogeneous. However, in real world, homogeneous target model parameters across study sites,
+which may be violated.
+
+*problem 3(a) Expand your R function in Problem 2 to calculate the meta-estimates of these model parameters and their corresponding standard errors in the above two log-linear models.*
+```{r}
+library(readxl)
+data <- read_excel("C:/Users/windu/Desktop/ScreenTime-hw3Q3-2.xlsx")
+head(data)
+```
+```{r}
+subset_dataA <- data[grep("A", data$Treatment), ]
+head(subset_dataA)
+```
+```{r}
+summary_tableA <- data.frame(beta0 = numeric(), beta1 = numeric(), 
+                             beta2 = numeric(), beta3 = numeric(), beta4 = numeric(), beta5 = numeric(), beta6 = numeric(), beta7 = numeric(), se_beta0 = numeric(),se_beta1 = numeric(), se_beta2 = numeric(), se_beta3 = numeric(), se_beta4 = numeric(), se_beta5 = numeric(), se_beta6 = numeric(), se_beta7 = numeric())
+
+ subset_dataA$Xt <- ifelse(subset_dataA$Day %in% c("Mo", "Tu", "We", "Th", "Fr"), 1, 0)
+ subset_dataA$At <- ifelse(subset_dataA$Phase %in% c("Treatment"), 1, 0)
+ lag1_pickups <- lag(subset_dataA$Pickups, n = 1)
+ lambda_i_t <- subset_dataA$Pickups/ subset_dataA$Tot.Scr.Time
+ modelA <- glm(lambda_i_t ~ log(lag1_pickups) + subset_dataA$At + subset_dataA$Xt + subset_dataA$sex + subset_dataA$age + subset_dataA$pets + subset_dataA$siblings,
+                offset = log(subset_dataA$Tot.Scr.Time),
+                family = poisson, 
+                data = subset_dataA)
+summary(modelA)
+```
+```{r}
+coefficients <- summary(modelA)$coefficients
+  beta0 = coefficients["(Intercept)", "Estimate"]
+  beta1 = coefficients["log(lag1_pickups)", "Estimate"]
+  beta2 = coefficients["subset_dataA$At", "Estimate"] 
+  beta3 = coefficients["subset_dataA$Xt", "Estimate"]
+  beta4 = coefficients["subset_dataA$sex", "Estimate"]
+  beta5 = coefficients["subset_dataA$age", "Estimate"]
+  beta6 = coefficients["subset_dataA$pets", "Estimate"]
+  beta7 = coefficients["subset_dataA$siblings", "Estimate"]
+  se_beta0 = coefficients["(Intercept)", "Std. Error"]
+  se_beta1 = coefficients["log(lag1_pickups)", "Std. Error"]
+  se_beta2 = coefficients["subset_dataA$At", "Std. Error"] 
+  se_beta3 = coefficients["subset_dataA$Xt", "Std. Error"]
+  se_beta4 = coefficients["subset_dataA$sex", "Std. Error"]
+  se_beta5 = coefficients["subset_dataA$age", "Std. Error"]
+  se_beta6 = coefficients["subset_dataA$pets", "Std. Error"]
+  se_beta7 = coefficients["subset_dataA$siblings", "Std. Error"]
+  summary_tableA <- rbind(summary_tableA, data.frame(beta0 = beta0, beta1 = beta1, beta2 = beta2, beta3 = beta3, beta4 = beta4, beta5 = beta5, beta6 = beta6, beta7 = beta7, se_beta0 = se_beta0, se_beta1 = se_beta1, se_beta2 = se_beta2, se_beta3 = se_beta3, se_beta4 = se_beta4, se_beta5 = se_beta5, se_beta6 = se_beta6, se_beta7 = se_beta7))
+  print(summary_tableA)
+```
+```{r}
+subset_dataB <- data[grep("B", data$Treatment), ]
+head(subset_dataB)
+```
+```{r}
+summary_tableB <- data.frame(beta0 = numeric(), beta1 = numeric(), 
+                             beta2 = numeric(), beta3 = numeric(), beta4 = numeric(), beta5 = numeric(), beta6 = numeric(), beta7 = numeric(), se_beta0 = numeric(),se_beta1 = numeric(), se_beta2 = numeric(), se_beta3 = numeric(), se_beta4 = numeric(), se_beta5 = numeric(), se_beta6 = numeric(), se_beta7 = numeric())
+
+ subset_dataB$Xt <- ifelse(subset_dataB$Day %in% c("Mo", "Tu", "We", "Th", "Fr"), 1, 0)
+ subset_dataB$Bt <- ifelse(subset_dataB$Phase %in% c("Treatment"), 1, 0)
+ lag1_pickups <- lag(subset_dataB$Pickups, n = 1)
+ lambda_i_t <- subset_dataB$Pickups/ subset_dataB$Tot.Scr.Time
+ modelB <- glm(lambda_i_t ~ log(lag1_pickups) + subset_dataB$Bt + subset_dataB$Xt + subset_dataB$sex + subset_dataB$age + subset_dataB$pets + subset_dataB$siblings,
+                offset = log(subset_dataB$Tot.Scr.Time),
+                family = poisson, 
+                data = subset_dataB)
+summary(modelB)
+```
+```{r}
+coefficients <- summary(modelB)$coefficients
+  beta0 = coefficients["(Intercept)", "Estimate"]
+  beta1 = coefficients["log(lag1_pickups)", "Estimate"]
+  beta2 = coefficients["subset_dataB$Bt", "Estimate"] 
+  beta3 = coefficients["subset_dataB$Xt", "Estimate"]
+  beta4 = coefficients["subset_dataB$sex", "Estimate"]
+  beta5 = coefficients["subset_dataB$age", "Estimate"]
+  beta6 = coefficients["subset_dataB$pets", "Estimate"]
+  beta7 = coefficients["subset_dataB$siblings", "Estimate"]
+  se_beta0 = coefficients["(Intercept)", "Std. Error"]
+  se_beta1 = coefficients["log(lag1_pickups)", "Std. Error"]
+  se_beta2 = coefficients["subset_dataB$Bt", "Std. Error"] 
+  se_beta3 = coefficients["subset_dataB$Xt", "Std. Error"]
+  se_beta4 = coefficients["subset_dataB$sex", "Std. Error"]
+  se_beta5 = coefficients["subset_dataB$age", "Std. Error"]
+  se_beta6 = coefficients["subset_dataB$pets", "Std. Error"]
+  se_beta7 = coefficients["subset_dataB$siblings", "Std. Error"]
+  summary_tableB <- rbind(summary_tableB, data.frame(beta0 = beta0, beta1 = beta1, beta2 = beta2, beta3 = beta3, beta4 = beta4, beta5 = beta5, beta6 = beta6, beta7 = beta7, se_beta0 = se_beta0, se_beta1 = se_beta1, se_beta2 = se_beta2, se_beta3 = se_beta3, se_beta4 = se_beta4, se_beta5 = se_beta5, se_beta6 = se_beta6, se_beta7 = se_beta7))
+  print(summary_tableB)
+```
+*(b) Use the meta-learning to examine whether or not a participant who received an intervention (either A or B) had a reduced daily number of pickups in comparison to the pre-intervention baseline screen activity. Justify at level α = 0.05.*
+```{r}
+install.packages("meta")
+```
+```{r}
+library(meta)
+summary_tableAB <- rbind(summary_tableA, summary_tableB)
+meta_results_AB <- metagen(TE = summary_tableAB$beta2, seTE = summary_tableAB$se_beta2, studlab = c("TreatmentA", "TreatmentB"), data = summary_tableAB)
+summary(meta_results_AB)
+```
+From the result, we can see the p value is smaller than 0.05. Therefore, we can conclude that a participant who received an intervention A or intervention B had a reduced daily number of pickups in comparison to the pre-intervention baseline screen activity.
+
+*(c) Repeat part (b) by the centralized analysis approach to fit the following model: where dummy variable Rt = 1 for an intervention (either A or B) at day t and 0 for baseline (i.e.no intervention) for day t.*
+```{r}
+data$Rt <- ifelse(data$Treatment %in% c("A","B"), 1, 0)
+head(data)
+```
+```{r}
+summary_table_all <- data.frame(beta0 = numeric(), beta1 = numeric(), 
+                             beta2 = numeric(), beta3 = numeric(), beta4 = numeric(), beta5 = numeric(), beta6 = numeric(), beta7 = numeric(), se_beta0 = numeric(),se_beta1 = numeric(), se_beta2 = numeric(), se_beta3 = numeric(), se_beta4 = numeric(), se_beta5 = numeric(), se_beta6 = numeric(), se_beta7 = numeric())
+
+ data$Xt <- ifelse(data$Day %in% c("Mo", "Tu", "We", "Th", "Fr"), 1, 0)
+ lag1_pickups <- lag(data$Pickups, n = 1)
+ lambda_i_t <- data$Pickups/ data$Tot.Scr.Time
+ model_all <- glm(lambda_i_t ~ log(lag1_pickups) + data$Rt + data$Xt + data$sex + data$age + data$pets + data$siblings, offset = log(data$Tot.Scr.Time),family = poisson, data = data)
+summary(model_all)
+```
+```{r}
+coefficients <- summary(model_all)$coefficients
+  beta0 = coefficients["(Intercept)", "Estimate"]
+  beta1 = coefficients["log(lag1_pickups)", "Estimate"]
+  beta2 = coefficients["data$Rt", "Estimate"] 
+  beta3 = coefficients["data$Xt", "Estimate"]
+  beta4 = coefficients["data$sex", "Estimate"]
+  beta5 = coefficients["data$age", "Estimate"]
+  beta6 = coefficients["data$pets", "Estimate"]
+  beta7 = coefficients["data$siblings", "Estimate"]
+  se_beta0 = coefficients["(Intercept)", "Std. Error"]
+  se_beta1 = coefficients["log(lag1_pickups)", "Std. Error"]
+  se_beta2 = coefficients["data$Rt", "Std. Error"] 
+  se_beta3 = coefficients["data$Xt", "Std. Error"]
+  se_beta4 = coefficients["data$sex", "Std. Error"]
+  se_beta5 = coefficients["data$age", "Std. Error"]
+  se_beta6 = coefficients["data$pets", "Std. Error"]
+  se_beta7 = coefficients["data$siblings", "Std. Error"]
+  summary_table_all <- rbind(summary_table_all, data.frame(beta0 = beta0, beta1 = beta1, beta2 = beta2, beta3 = beta3, beta4 = beta4, beta5 = beta5, beta6 = beta6, beta7 = beta7, se_beta0 = se_beta0, se_beta1 = se_beta1, se_beta2 = se_beta2, se_beta3 = se_beta3, se_beta4 = se_beta4, se_beta5 = se_beta5, se_beta6 = se_beta6, se_beta7 = se_beta7))
+  print(summary_table_all)
+```
+
+```{r}
+library(meta)
+meta_results_all <- metagen(TE = summary_table_all$beta2, seTE = summary_table_all$se_beta2, studlab = 1 , data = summary_table_all)
+summary(meta_results_all)
+```
+Because the p value is smaller than 0.05. Therefore, we can get the same conclusion as the part (b), we can conclude that a participant who received an intervention A or intervention B had a reduced daily number of pickups in comparison to the pre-intervention baseline screen activity.
+
+*(d) Comment on similarity and differences between findings obtained in parts (b) and (c).*
+
+similarity: 1.for part(b) and part(c), they all have the same conclusion, which is a participant who received an intervention A or intervention B had a reduced daily number of pickups in comparison to the pre-intervention baseline screen activity. 2. for part(b) and part(c), they all build a generalized linear model to assess whether intervention A or intervention B had a reduced daily number of pickups in comparison to the pre-intervention baseline screen activity. Difference: 1. for part(b), we need to build a GLM for intervention A and intervention B separately. Then we combined A and B to perform meta learning to obtain the conclusion. However, for part(c), we do not need to calculate intervention A and intervention B separately. Instead, we use Rt to represent intervention A and B and then we can perform meta learning.
